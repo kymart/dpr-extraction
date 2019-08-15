@@ -1,0 +1,100 @@
+---
+title: 'DPR File: Data Extraction'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load libraries
+```{r, echo = TRUE, results = 'hide', warning = FALSE, message = FALSE}
+# tidyverse will be used for data wrangling and plotting via ggplot
+library(tidyverse)
+```
+
+### Define the location of .DPR files
+```{r}
+# DPR files should be placed in the "data" folder of the working directory
+
+# list the files that are located in the data file and that end with ".DPR"
+txts <- list.files(path = "data", pattern = "*.DPR$")
+
+# show the first 6 files of interest
+head(txts)
+
+# observe the total number of files 
+length(txts)
+```
+
+### Compile all DPR files into a single tibble
+```{r, warning = FALSE, message = FALSE}
+# create an empty tibble that will be used to store all the listed files
+comb_tib <- tibble()
+
+
+# use for loop to read in all files and add to the previously generated tibble
+# for loop is setup so that each file is successively added to the same tibble
+for(raw_file in txts) {
+  # input files should be placed in the "data" folder of the working directory
+  input_path <- file.path("data", paste0(raw_file))
+  
+  # use readLines() to read each individual line of the .DPR file this will create a list for each line of the file
+  data <- readLines(input_path)
+  
+  # use lapply to first split each list up based on tab (\t) and then unlist each object
+  lst <- lapply(
+    data, function(x) unlist(strsplit(x, "\t"))
+    )
+
+  # subset the lst object to isolate the table at the bottom of the file, which will be any list object that that has a length greater than one...everything wil a length less than one is the heading and is not needed
+  minus_head <- lst[lengths(lst) > 1]
+
+  # multiple steps, that start in the middle
+  # the fourth step is to turn the matrix into a data frame, defining that strings should not be coerced into factors
+  df <- data.frame(
+    # third, turn the unlisted and trimmed object into a matrix, with the number of rows being the length of the minus_head
+      # need to define that this is done `byrow`
+    matrix(
+      # second, trim the white space from both sides of each object
+      str_trim(
+        # first, unlist the minus_head object to make vectors out of each list object
+        unlist(minus_head), 
+        side = "both"),
+      nrow = length(minus_head), 
+      byrow = T
+    ),
+    stringsAsFactors=FALSE
+  )
+  
+  # the colnames will be incorported into the dataframe, and dummy col names will be automatically generate
+  # to avoid this, isolate the actual column names, which will be listed in the first row and assign theses as the colnames()
+  colnames(df) <- df[1,]
+  # the column names are now listed as the column names and are repeated in the first row, so drop the first row
+  df <- df[-1, ]
+
+  # bind the formated df with column names to the previously generated tibble -- comb_tib
+  comb_tib <- bind_rows(comb_tib, df)
+}
+```
+
+```{r}
+#view the structure of the combined file. Note that all columns are of the type - "character"
+str(comb_tib)
+```
+
+### Modify tibble to reflect numeric columns
+```{r}
+# change class of all numeric columns
+final_tib <- comb_tib %>% 
+  mutate_at(
+    vars(-one_of(c("PSA", "ANIMAL ID", "DESCRIPTION", "FILENAME", "TIME", "DATE", "USER ID"))),
+    as.numeric
+  )
+```
+
+```{r}
+# columns defined above remain of the class "character", while the rest are turned to numeric
+str(final_tib)
+```
+
